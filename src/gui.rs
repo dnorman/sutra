@@ -55,6 +55,24 @@ fn icon_svg(data: &'static [u8], size: f32, color: iced::Color) -> Element<'stat
         .into()
 }
 
+/// Style for tooltip bubbles — background, rounded border, subtle shadow.
+fn tooltip_style(pal: Palette) -> impl Fn(&Theme) -> container::Style {
+    move |_theme| container::Style {
+        background: Some(iced::Background::Color(pal.card_bg)),
+        border: iced::Border {
+            color: pal.card_border,
+            width: 1.0,
+            radius: 6.0.into(),
+        },
+        shadow: iced::Shadow {
+            color: pal.card_shadow,
+            offset: iced::Vector::new(0.0, 2.0),
+            blur_radius: 8.0,
+        },
+        text_color: Some(pal.fg),
+    }
+}
+
 /// Theme-aware color palette.
 #[derive(Clone, Copy)]
 struct Palette {
@@ -145,7 +163,7 @@ pub fn run() {
     )
     .ok();
 
-    iced::application("sutra", update, view)
+    iced::application("Sutra", update, view)
         .theme(theme)
         .subscription(subscription)
         .window(iced::window::Settings {
@@ -252,28 +270,38 @@ fn view(app: &App) -> Element<'_, Message> {
         let notif_tip = if app.notifier.global_notifications_off { "Enable notifications" } else { "Disable notifications" };
         let theme_tip = if app.dark_mode { "Switch to light mode" } else { "Switch to dark mode" };
 
+        let tip_style = tooltip_style(pal);
+        let tip_style2 = tooltip_style(pal);
+        let tip_style3 = tooltip_style(pal);
+
         let toolbar_row = row![
             iced::widget::horizontal_space(),
             tooltip(
                 mouse_area(icon_svg(mute_icon, 16.0, icon_color))
                     .on_press(Message::ToggleGlobalMute),
-                text(mute_tip).size(11).color(pal.muted),
+                text(mute_tip).size(11),
                 tooltip::Position::Bottom,
-            ),
+            )
+            .style(tip_style)
+            .gap(4),
             text("\u{00b7}").size(8).color(pal.muted), // middle dot separator
             tooltip(
                 mouse_area(icon_svg(notif_icon, 16.0, icon_color))
                     .on_press(Message::ToggleGlobalNotifications),
-                text(notif_tip).size(11).color(pal.muted),
+                text(notif_tip).size(11),
                 tooltip::Position::Bottom,
-            ),
+            )
+            .style(tip_style2)
+            .gap(4),
             text("\u{00b7}").size(8).color(pal.muted),
             tooltip(
                 mouse_area(icon_svg(theme_icon, 16.0, icon_color))
                     .on_press(Message::ToggleTheme),
-                text(theme_tip).size(11).color(pal.muted),
+                text(theme_tip).size(11),
                 tooltip::Position::Bottom,
-            ),
+            )
+            .style(tip_style3)
+            .gap(4),
         ]
         .spacing(8)
         .align_y(iced::Alignment::Center);
@@ -358,9 +386,11 @@ fn env_card(
                 icon_svg(ICON_SQUARE, 10.0, pal.red),
             )
             .on_press(Message::TerminateEnv { pid: env.pid }),
-            text("Terminate environment").size(11).color(pal.muted),
+            text("Terminate environment").size(11),
             tooltip::Position::Top,
         )
+        .style(tooltip_style(*pal))
+        .gap(4)
         .into();
         header = header.push(stop_btn);
     }
@@ -446,18 +476,22 @@ fn env_card(
                             env_id: env.id.clone(),
                             unit_name: unit.name.clone(),
                         }),
-                    text(unit_mute_tip).size(11).color(pal.muted),
+                    text(unit_mute_tip).size(11),
                     tooltip::Position::Top,
-                ),
+                )
+                .style(tooltip_style(*pal))
+                .gap(4),
                 tooltip(
                     mouse_area(icon_svg(notif_icon_data, 12.0, if is_notif_off { pal.muted } else { pal.fg }))
                         .on_press(Message::ToggleUnitNotifications {
                             env_id: env.id.clone(),
                             unit_name: unit.name.clone(),
                         }),
-                    text(unit_notif_tip).size(11).color(pal.muted),
+                    text(unit_notif_tip).size(11),
                     tooltip::Position::Top,
-                ),
+                )
+                .style(tooltip_style(*pal))
+                .gap(4),
                 // indicator dot (fixed 14px container)
                 container(text(indicator.to_string()).size(11).color(color)).width(14.0),
                 name_cell,
@@ -478,9 +512,11 @@ fn env_card(
                     tooltip(
                         mouse_area(text("\u{2197}").size(13).color(cyan))
                             .on_press(Message::OpenBrowser { port }),
-                        text("Open in browser").size(11).color(pal.muted),
+                        text("Open in browser").size(11),
                         tooltip::Position::Top,
-                    ),
+                    )
+                    .style(tooltip_style(*pal))
+                    .gap(4),
                 );
             }
 

@@ -2,7 +2,7 @@
 
 ## What is this?
 
-Sutra is a macOS status dashboard for dev.sh environments. It watches `~/.dev-runner/` and displays each environment's units in a GUI (iced) or TUI (ratatui), with system sounds, speech, and macOS notifications on state transitions.
+Sutra is a macOS status dashboard that monitors the well-known state folder `~/.dev-runner/`. It displays each environment's units in a GUI (iced) or TUI (ratatui), with system sounds, speech, and macOS notifications on state transitions.
 
 The repo directory is `/Users/daniel/code/sutra`, remote is `git@github.com:dnorman/sutra.git`.
 

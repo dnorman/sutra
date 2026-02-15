@@ -1,6 +1,6 @@
 # `.dev-runner/` State Specification
 
-This document defines the file format and conventions for `~/.dev-runner/`, the well-known location shared between **dev.sh** (the environment runner) and **sutra** (the status dashboard).
+This document defines the file format and conventions for `~/.dev-runner/`, a well-known state folder used by environment runners and status dashboards like **sutra**.
 
 ## Overview
 
@@ -17,7 +17,7 @@ No locking, coordination, or daemon is required. Writers create/update files ato
 ~/.dev-runner/
 ```
 
-Created automatically by either dev.sh or sutra if it does not exist.
+Created automatically by the environment runner or sutra if it does not exist.
 
 ## Meta Files
 
@@ -74,8 +74,8 @@ VITE_PORT=5173
 
 ### Lifecycle
 
-- **Created** by dev.sh when an environment starts
-- **Deleted** by dev.sh when an environment stops (along with all associated status files)
+- **Created** by the environment runner when an environment starts
+- **Deleted** by the environment runner when an environment stops (along with all associated status files)
 - **Read** by sutra on each refresh or filesystem event
 - **Liveness**: sutra checks `kill(PID, 0)` to determine if the environment is still alive. A meta file with a dead PID is shown as inactive but not automatically removed.
 
@@ -207,4 +207,4 @@ Sound mute and notification suppression are independent — you can mute audio w
 - Meta filenames must be pure hex — any file containing `.` is treated as a status file or ignored
 - Keys in meta files are case-sensitive (`DIR`, not `dir`)
 - State strings in status files are case-sensitive (`ready`, not `Ready`)
-- The `~/.dev-runner/` path is not configurable (hardcoded in both dev.sh and sutra)
+- The `~/.dev-runner/` path is not configurable (hardcoded convention)
