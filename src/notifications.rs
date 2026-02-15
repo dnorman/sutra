@@ -84,9 +84,7 @@ impl Notifier {
                     if let Some(ref stream) = audio_stream {
                         let sound_path = format!("/System/Library/Sounds/{}.aiff", sound);
                         if let Ok(file) = std::fs::File::open(&sound_path) {
-                            if let Ok(source) =
-                                rodio::Decoder::new(std::io::BufReader::new(file))
-                            {
+                            if let Ok(source) = rodio::Decoder::new(std::io::BufReader::new(file)) {
                                 let sink = rodio::Sink::connect_new(stream.mixer());
                                 sink.append(source);
                                 sink.sleep_until_end();
