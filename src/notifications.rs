@@ -42,6 +42,7 @@ impl Notifier {
             Self::audio_thread(rx);
         });
 
+        #[cfg(target_os = "macos")]
         let _ = mac_notification_sys::set_application("io.github.dnorman.sutra");
 
         Notifier {
@@ -58,20 +59,34 @@ impl Notifier {
 
     fn audio_thread(rx: mpsc::Receiver<Action>) {
         // Init rodio (optional — skip if unavailable)
+        #[cfg(target_os = "macos")]
         let audio_stream = rodio::OutputStreamBuilder::open_default_stream().ok();
 
         // Init TTS via AppKit backend (NSSpeechSynthesizer) — uses the same
         // voice as `say`, which is the system default from System Preferences.
+        #[cfg(target_os = "macos")]
         let mut tts_engine = tts::Tts::new(tts::Backends::AppKit).ok();
 
         for action in rx {
             match action {
-                Action::SoundAndSpeak { sound, text } => {
+                Action::SoundAndSpeak {
+                    #[cfg(target_os = "macos")]
+                    sound,
+                    #[cfg(not(target_os = "macos"))]
+                        sound: _,
+                    #[cfg(target_os = "macos")]
+                    text,
+                    #[cfg(not(target_os = "macos"))]
+                        text: _,
+                } => {
                     // Play system sound
+                    #[cfg(target_os = "macos")]
                     if let Some(ref stream) = audio_stream {
                         let sound_path = format!("/System/Library/Sounds/{}.aiff", sound);
                         if let Ok(file) = std::fs::File::open(&sound_path) {
-                            if let Ok(source) = rodio::Decoder::new(std::io::BufReader::new(file)) {
+                            if let Ok(source) =
+                                rodio::Decoder::new(std::io::BufReader::new(file))
+                            {
                                 let sink = rodio::Sink::connect_new(stream.mixer());
                                 sink.append(source);
                                 sink.sleep_until_end();
@@ -80,6 +95,7 @@ impl Notifier {
                     }
 
                     // Speak — poll is_speaking() since AppKit backend has no callbacks
+                    #[cfg(target_os = "macos")]
                     if let Some(ref mut tts) = tts_engine {
                         if tts.speak(&text, false).is_ok() {
                             while tts.is_speaking().unwrap_or(false) {
@@ -145,14 +161,17 @@ impl Notifier {
             let notifications_off =
                 self.global_notifications_off || self.notifications_off_units.contains(&uk);
             if !notifications_off {
-                let unit_name = &key.1;
-                let state_str = new_state.to_string();
-                let _ = mac_notification_sys::send_notification(
-                    &format!("sutra — {}", unit_name),
-                    None,
-                    &state_str,
-                    None,
-                );
+                #[cfg(target_os = "macos")]
+                {
+                    let unit_name = &key.1;
+                    let state_str = new_state.to_string();
+                    let _ = mac_notification_sys::send_notification(
+                        &format!("sutra — {}", unit_name),
+                        None,
+                        &state_str,
+                        None,
+                    );
+                }
             }
 
             // Check sound mute
