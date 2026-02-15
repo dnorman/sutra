@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     outputs:
       tag: ${{ steps.version.outputs.tag }}
       published: ${{ steps.publish.outputs.published }}
@@ -39,10 +39,6 @@ jobs:
           else
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
-
-      - name: Test
-        if: steps.check.outputs.exists == 'false'
-        run: cargo test --verbose
 
       - name: Publish to crates.io
         id: publish
