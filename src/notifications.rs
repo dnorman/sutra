@@ -71,8 +71,7 @@ impl Notifier {
                     if let Some(ref stream) = audio_stream {
                         let sound_path = format!("/System/Library/Sounds/{}.aiff", sound);
                         if let Ok(file) = std::fs::File::open(&sound_path) {
-                            if let Ok(source) = rodio::Decoder::new(std::io::BufReader::new(file))
-                            {
+                            if let Ok(source) = rodio::Decoder::new(std::io::BufReader::new(file)) {
                                 let sink = rodio::Sink::connect_new(stream.mixer());
                                 sink.append(source);
                                 sink.sleep_until_end();
@@ -101,10 +100,7 @@ impl Notifier {
         let mut current: HashMap<(String, String), State> = HashMap::new();
         for env in envs {
             for unit in &env.units {
-                current.insert(
-                    (env.id.clone(), unit.name.clone()),
-                    unit.state.clone(),
-                );
+                current.insert((env.id.clone(), unit.name.clone()), unit.state.clone());
             }
         }
 
@@ -138,9 +134,7 @@ impl Notifier {
                 State::Ready | State::Running => {
                     (Some("Ping"), Some(format!("{} {}", key.1, new_state)))
                 }
-                State::Failed => {
-                    (Some("Basso"), Some(format!("{} {}", key.1, new_state)))
-                }
+                State::Failed => (Some("Basso"), Some(format!("{} {}", key.1, new_state))),
             };
 
             let Some(sound) = sound else { continue };
@@ -148,8 +142,8 @@ impl Notifier {
             let uk = unit_key(&key.0, &key.1);
 
             // Send macOS notification (independent of sound mute)
-            let notifications_off = self.global_notifications_off
-                || self.notifications_off_units.contains(&uk);
+            let notifications_off =
+                self.global_notifications_off || self.notifications_off_units.contains(&uk);
             if !notifications_off {
                 let unit_name = &key.1;
                 let state_str = new_state.to_string();
@@ -214,7 +208,8 @@ impl Notifier {
     }
 
     pub fn is_unit_notifications_off(&self, env_id: &str, unit_name: &str) -> bool {
-        self.notifications_off_units.contains(&unit_key(env_id, unit_name))
+        self.notifications_off_units
+            .contains(&unit_key(env_id, unit_name))
     }
 }
 

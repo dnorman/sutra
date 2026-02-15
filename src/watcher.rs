@@ -73,7 +73,9 @@ impl RegistryWatcher {
 
                 let watch_event = match event.kind {
                     EventKind::Remove(_) => WatchEvent::EnvironmentRemoved(id),
-                    EventKind::Create(_) | EventKind::Modify(_) => WatchEvent::EnvironmentChanged(id),
+                    EventKind::Create(_) | EventKind::Modify(_) => {
+                        WatchEvent::EnvironmentChanged(id)
+                    }
                     _ => continue,
                 };
 

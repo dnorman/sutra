@@ -1,5 +1,5 @@
-use iced::widget::{column, container, mouse_area, row, scrollable, text, svg, tooltip, Column};
-use iced::{color, Element, Font, Subscription, Theme};
+use iced::widget::{Column, column, container, mouse_area, row, scrollable, svg, text, tooltip};
+use iced::{Element, Font, Subscription, Theme, color};
 
 use crate::model::{self, Environment, State};
 use crate::notifications::Notifier;
@@ -49,9 +49,7 @@ fn icon_svg(data: &'static [u8], size: f32, color: iced::Color) -> Element<'stat
     svg(handle)
         .width(size)
         .height(size)
-        .style(move |_theme, _status| svg::Style {
-            color: Some(color),
-        })
+        .style(move |_theme, _status| svg::Style { color: Some(color) })
         .into()
 }
 
@@ -126,22 +124,13 @@ enum Message {
     Tick,
     WatchEvent,
     ToggleGlobalMute,
-    ToggleUnitMute {
-        env_id: String,
-        unit_name: String,
-    },
+    ToggleUnitMute { env_id: String, unit_name: String },
     ToggleGlobalNotifications,
-    ToggleUnitNotifications {
-        env_id: String,
-        unit_name: String,
-    },
+    ToggleUnitNotifications { env_id: String, unit_name: String },
     ToggleTheme,
     OpenBrowser { port: u16 },
     TerminateEnv { pid: u32 },
-    HoverUnit {
-        env_id: String,
-        unit_name: String,
-    },
+    HoverUnit { env_id: String, unit_name: String },
     UnhoverUnit,
     Quit,
 }
@@ -157,11 +146,7 @@ pub fn run() {
     #[cfg(target_os = "macos")]
     set_dock_icon();
 
-    let icon = iced::window::icon::from_file_data(
-        include_bytes!("../assets/icon.png"),
-        None,
-    )
-    .ok();
+    let icon = iced::window::icon::from_file_data(include_bytes!("../assets/icon.png"), None).ok();
 
     iced::application("Sutra", update, view)
         .theme(theme)
@@ -200,19 +185,13 @@ fn update(app: &mut App, message: Message) -> iced::Task<Message> {
         Message::ToggleTheme => {
             app.dark_mode = !app.dark_mode;
         }
-        Message::ToggleUnitMute {
-            env_id,
-            unit_name,
-        } => {
+        Message::ToggleUnitMute { env_id, unit_name } => {
             app.notifier.toggle_unit_mute(&env_id, &unit_name);
         }
         Message::ToggleGlobalNotifications => {
             app.notifier.toggle_global_notifications();
         }
-        Message::ToggleUnitNotifications {
-            env_id,
-            unit_name,
-        } => {
+        Message::ToggleUnitNotifications { env_id, unit_name } => {
             app.notifier.toggle_unit_notifications(&env_id, &unit_name);
         }
         Message::OpenBrowser { port } => {
@@ -258,17 +237,25 @@ fn view(app: &App) -> Element<'_, Message> {
             ICON_BELL
         };
 
-        let theme_icon = if app.dark_mode {
-            ICON_SUN
-        } else {
-            ICON_MOON
-        };
+        let theme_icon = if app.dark_mode { ICON_SUN } else { ICON_MOON };
 
         let icon_color = pal.fg;
 
-        let mute_tip = if app.notifier.global_mute { "Unmute all sounds" } else { "Mute all sounds" };
-        let notif_tip = if app.notifier.global_notifications_off { "Enable notifications" } else { "Disable notifications" };
-        let theme_tip = if app.dark_mode { "Switch to light mode" } else { "Switch to dark mode" };
+        let mute_tip = if app.notifier.global_mute {
+            "Unmute all sounds"
+        } else {
+            "Mute all sounds"
+        };
+        let notif_tip = if app.notifier.global_notifications_off {
+            "Enable notifications"
+        } else {
+            "Disable notifications"
+        };
+        let theme_tip = if app.dark_mode {
+            "Switch to light mode"
+        } else {
+            "Switch to dark mode"
+        };
 
         let tip_style = tooltip_style(pal);
         let tip_style2 = tooltip_style(pal);
@@ -295,8 +282,7 @@ fn view(app: &App) -> Element<'_, Message> {
             .gap(4),
             text("\u{00b7}").size(8).color(pal.muted),
             tooltip(
-                mouse_area(icon_svg(theme_icon, 16.0, icon_color))
-                    .on_press(Message::ToggleTheme),
+                mouse_area(icon_svg(theme_icon, 16.0, icon_color)).on_press(Message::ToggleTheme),
                 text(theme_tip).size(11),
                 tooltip::Position::Bottom,
             )
@@ -373,19 +359,15 @@ fn env_card(
             .color(pal.fg)
             .font(Font::DEFAULT),
         iced::widget::horizontal_space(),
-        text(env.elapsed_string())
-            .size(12)
-            .color(pal.muted),
+        text(env.elapsed_string()).size(12).color(pal.muted),
     ]
     .spacing(6)
     .align_y(iced::Alignment::Center);
 
     if env.alive {
         let stop_btn: Element<'static, Message> = tooltip(
-            mouse_area(
-                icon_svg(ICON_SQUARE, 10.0, pal.red),
-            )
-            .on_press(Message::TerminateEnv { pid: env.pid }),
+            mouse_area(icon_svg(ICON_SQUARE, 10.0, pal.red))
+                .on_press(Message::TerminateEnv { pid: env.pid }),
             text("Terminate environment").size(11),
             tooltip::Position::Top,
         )
@@ -406,7 +388,11 @@ fn env_card(
         let name_col_w = (max_name_chars as f32 * CHAR_W).ceil() + 4.0;
 
         let has_any_port = env.units.iter().any(|u| env.port_for(&u.name).is_some());
-        let port_col_w: f32 = if has_any_port { 6.0 * CHAR_W + 4.0 } else { 0.0 };
+        let port_col_w: f32 = if has_any_port {
+            6.0 * CHAR_W + 4.0
+        } else {
+            0.0
+        };
 
         let max_state_chars = env
             .units
@@ -431,12 +417,23 @@ fn env_card(
             let name_color = if is_muted { pal.muted } else { pal.fg };
 
             // Per-unit icons (left of indicator for alignment)
-            let mute_icon_data = if is_muted { ICON_VOLUME_X } else { ICON_VOLUME_2 };
-            let notif_icon_data = if is_notif_off { ICON_BELL_OFF } else { ICON_BELL };
+            let mute_icon_data = if is_muted {
+                ICON_VOLUME_X
+            } else {
+                ICON_VOLUME_2
+            };
+            let notif_icon_data = if is_notif_off {
+                ICON_BELL_OFF
+            } else {
+                ICON_BELL
+            };
 
             // Fixed-width cells for true table-column alignment
             let name_cell = container(
-                text(unit.name.clone()).size(12).color(name_color).font(MONO),
+                text(unit.name.clone())
+                    .size(12)
+                    .color(name_color)
+                    .font(MONO),
             )
             .width(name_col_w);
 
@@ -452,10 +449,8 @@ fn env_card(
                 text("").into()
             };
 
-            let state_cell = container(
-                text(unit.state.to_string()).size(12).color(color),
-            )
-            .width(state_col_w);
+            let state_cell =
+                container(text(unit.state.to_string()).size(12).color(color)).width(state_col_w);
 
             let unit_mute_tip = if is_muted {
                 format!("Unmute {}", unit.name)
@@ -471,22 +466,30 @@ fn env_card(
             let mut unit_row = row![
                 // icon pair: mute + bell (fixed 12px each)
                 tooltip(
-                    mouse_area(icon_svg(mute_icon_data, 12.0, if is_muted { pal.muted } else { pal.fg }))
-                        .on_press(Message::ToggleUnitMute {
-                            env_id: env.id.clone(),
-                            unit_name: unit.name.clone(),
-                        }),
+                    mouse_area(icon_svg(
+                        mute_icon_data,
+                        12.0,
+                        if is_muted { pal.muted } else { pal.fg }
+                    ))
+                    .on_press(Message::ToggleUnitMute {
+                        env_id: env.id.clone(),
+                        unit_name: unit.name.clone(),
+                    }),
                     text(unit_mute_tip).size(11),
                     tooltip::Position::Top,
                 )
                 .style(tooltip_style(*pal))
                 .gap(4),
                 tooltip(
-                    mouse_area(icon_svg(notif_icon_data, 12.0, if is_notif_off { pal.muted } else { pal.fg }))
-                        .on_press(Message::ToggleUnitNotifications {
-                            env_id: env.id.clone(),
-                            unit_name: unit.name.clone(),
-                        }),
+                    mouse_area(icon_svg(
+                        notif_icon_data,
+                        12.0,
+                        if is_notif_off { pal.muted } else { pal.fg }
+                    ))
+                    .on_press(Message::ToggleUnitNotifications {
+                        env_id: env.id.clone(),
+                        unit_name: unit.name.clone(),
+                    }),
                     text(unit_notif_tip).size(11),
                     tooltip::Position::Top,
                 )
@@ -551,10 +554,7 @@ fn env_card(
             let unit_name = unit.name.clone();
 
             let unit_element: Element<'static, Message> = mouse_area(row_container)
-                .on_enter(Message::HoverUnit {
-                    env_id,
-                    unit_name,
-                })
+                .on_enter(Message::HoverUnit { env_id, unit_name })
                 .on_exit(Message::UnhoverUnit)
                 .into();
 
@@ -637,8 +637,7 @@ fn watch_registry() -> impl iced::futures::Stream<Item = Message> {
 
         // Bridge the std::sync::mpsc channel to an async futures::channel::mpsc
         // so we don't block iced's event loop.
-        let (mut async_tx, mut async_rx) =
-            iced::futures::channel::mpsc::channel::<WatchEvent>(32);
+        let (mut async_tx, mut async_rx) = iced::futures::channel::mpsc::channel::<WatchEvent>(32);
         std::thread::spawn(move || {
             while let Ok(event) = rx.recv() {
                 // Use try_send to avoid needing async; drop events if the

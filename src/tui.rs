@@ -1,15 +1,17 @@
 use std::io;
 use std::time::{Duration, Instant};
 
-use crossterm::event::{self, Event, KeyCode, KeyEventKind, MouseEventKind, EnableMouseCapture, DisableMouseCapture};
+use crossterm::event::{
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, MouseEventKind,
+};
 use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
-use crossterm::{execute, cursor};
+use crossterm::{cursor, execute};
+use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Layout};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
-use ratatui::Terminal;
 
 use crate::model::{self, Environment, State};
 use crate::notifications::Notifier;
@@ -102,8 +104,7 @@ impl App {
         if let Some(r) = self.selected_unit_ref() {
             let env = &self.envs[r.env_index];
             let unit = &env.units[r.unit_index];
-            self.notifier
-                .toggle_unit_mute(&env.id, &unit.name);
+            self.notifier.toggle_unit_mute(&env.id, &unit.name);
         }
     }
 
@@ -112,8 +113,7 @@ impl App {
         if let Some(r) = self.selected_unit_ref() {
             let env = &self.envs[r.env_index];
             let unit = &env.units[r.unit_index];
-            self.notifier
-                .toggle_unit_notifications(&env.id, &unit.name);
+            self.notifier.toggle_unit_notifications(&env.id, &unit.name);
         }
     }
 
@@ -204,12 +204,7 @@ fn env_lines(
     )]));
 
     // Compute dynamic column widths like the GUI does
-    let max_name_len = env
-        .units
-        .iter()
-        .map(|u| u.name.len())
-        .max()
-        .unwrap_or(0);
+    let max_name_len = env.units.iter().map(|u| u.name.len()).max().unwrap_or(0);
 
     let has_any_port = env.units.iter().any(|u| env.port_for(&u.name).is_some());
     // Ports are displayed as ":<port>" which is at most 6 chars (e.g. ":65535")
@@ -232,7 +227,11 @@ fn env_lines(
         let indicator = unit.state.display_indicator();
         let color = state_color(&unit.state);
 
-        let name_color = if is_muted { Color::DarkGray } else { Color::White };
+        let name_color = if is_muted {
+            Color::DarkGray
+        } else {
+            Color::White
+        };
 
         let mut spans: Vec<Span<'static>> = Vec::new();
 
@@ -250,14 +249,26 @@ fn env_lines(
 
         // Per-unit status icons (mute + notification)
         let mute_icon = if is_muted { "\u{1f507}" } else { "\u{1f50a}" };
-        let notif_icon = if is_notif_off { "\u{1f515}" } else { "\u{1f514}" };
+        let notif_icon = if is_notif_off {
+            "\u{1f515}"
+        } else {
+            "\u{1f514}"
+        };
         spans.push(Span::styled(
             mute_icon.to_string(),
-            Style::default().fg(if is_muted { Color::DarkGray } else { Color::White }),
+            Style::default().fg(if is_muted {
+                Color::DarkGray
+            } else {
+                Color::White
+            }),
         ));
         spans.push(Span::styled(
             notif_icon.to_string(),
-            Style::default().fg(if is_notif_off { Color::DarkGray } else { Color::White }),
+            Style::default().fg(if is_notif_off {
+                Color::DarkGray
+            } else {
+                Color::White
+            }),
         ));
         spans.push(Span::raw(" "));
 
@@ -332,7 +343,10 @@ fn build_content_lines(
             Style::default().fg(Color::DarkGray),
         )));
         line_to_unit.push(None);
-        return ContentLines { lines, line_to_unit };
+        return ContentLines {
+            lines,
+            line_to_unit,
+        };
     }
 
     let separator: String = "\u{2500}".repeat(width as usize);
@@ -359,7 +373,10 @@ fn build_content_lines(
         flat_offset += env.units.len();
     }
 
-    ContentLines { lines, line_to_unit }
+    ContentLines {
+        lines,
+        line_to_unit,
+    }
 }
 
 /// Entry point for the TUI. Called from main.
@@ -368,7 +385,12 @@ pub fn run() {
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |panic_info| {
         let _ = terminal::disable_raw_mode();
-        let _ = execute!(io::stdout(), LeaveAlternateScreen, cursor::Show, DisableMouseCapture);
+        let _ = execute!(
+            io::stdout(),
+            LeaveAlternateScreen,
+            cursor::Show,
+            DisableMouseCapture
+        );
         original_hook(panic_info);
     }));
 
@@ -382,7 +404,12 @@ fn run_inner() -> io::Result<()> {
     // Setup terminal
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, cursor::Hide, EnableMouseCapture)?;
+    execute!(
+        stdout,
+        EnterAlternateScreen,
+        cursor::Hide,
+        EnableMouseCapture
+    )?;
 
     // Set terminal title
     execute!(stdout, terminal::SetTitle("sutra"))?;
@@ -505,24 +532,22 @@ fn run_inner() -> io::Result<()> {
 
         if event::poll(timeout)? {
             match event::read()? {
-                Event::Key(key) if key.kind == KeyEventKind::Press => {
-                    match key.code {
-                        KeyCode::Char('q') => break,
-                        KeyCode::Char('r') => {
-                            app.refresh();
-                            last_refresh = Instant::now();
-                        }
-                        KeyCode::Char('j') | KeyCode::Down => app.select_next(),
-                        KeyCode::Char('k') | KeyCode::Up => app.select_prev(),
-                        KeyCode::Char('m') => app.notifier.toggle_global_mute(),
-                        KeyCode::Char('n') => app.notifier.toggle_global_notifications(),
-                        KeyCode::Char('M') => app.toggle_selected_unit_mute(),
-                        KeyCode::Char('N') => app.toggle_selected_unit_notifications(),
-                        KeyCode::Char('o') => app.open_selected_unit_browser(),
-                        KeyCode::Char('x') => app.terminate_selected_env(),
-                        _ => {}
+                Event::Key(key) if key.kind == KeyEventKind::Press => match key.code {
+                    KeyCode::Char('q') => break,
+                    KeyCode::Char('r') => {
+                        app.refresh();
+                        last_refresh = Instant::now();
                     }
-                }
+                    KeyCode::Char('j') | KeyCode::Down => app.select_next(),
+                    KeyCode::Char('k') | KeyCode::Up => app.select_prev(),
+                    KeyCode::Char('m') => app.notifier.toggle_global_mute(),
+                    KeyCode::Char('n') => app.notifier.toggle_global_notifications(),
+                    KeyCode::Char('M') => app.toggle_selected_unit_mute(),
+                    KeyCode::Char('N') => app.toggle_selected_unit_notifications(),
+                    KeyCode::Char('o') => app.open_selected_unit_browser(),
+                    KeyCode::Char('x') => app.terminate_selected_env(),
+                    _ => {}
+                },
                 Event::Mouse(mouse) => match mouse.kind {
                     MouseEventKind::Down(_) => {
                         // Map click row to a unit
