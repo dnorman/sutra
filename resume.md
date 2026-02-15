@@ -8,13 +8,15 @@ The repo directory is `/Users/daniel/code/sutra`, remote is `git@github.com:dnor
 
 ## Current state (2026-02-15)
 
-**Compiles clean** — zero warnings, `cargo clippy -- -D warnings` passes (pending final verification after last round of fixes).
+**Compiles clean** — zero warnings, `cargo clippy -- -D warnings` passes on macOS. Cross-platform compilation supported (Linux, macOS).
 
-**Initial commit pushed** to `origin/master`. Not yet published to crates.io (need to do `cargo publish` locally for the first time). The `CARGO_REGISTRY_TOKEN` secret needs to be set in GitHub repo settings for CI auto-publish.
+**Published** to GitHub at `origin/main`. `CARGO_REGISTRY_TOKEN` is configured — CI auto-publishes to crates.io on version bumps.
 
 ### What was done this session
 
-1. **CRITICAL bug fixed**: GUI crashed on every start due to `text("").size(0)` in gui.rs (port cell for environments without ports). `cosmic-text` panics on zero line height, which hit the ObjC boundary causing SIGABRT. Fixed by removing `.size(0)`.
+1. **Cross-platform compilation** (latest): Moved `rodio`, `tts`, `mac-notification-sys` behind `target.'cfg(target_os = "macos")'.dependencies`. Cfg-gated all macOS-specific code in `notifications.rs`. Audio thread still runs on all platforms but only plays sounds/speaks on macOS. Publish workflow switched to `ubuntu-latest`. GitHub issue #1 created for Linux/Windows GUI support.
+
+2. **CRITICAL bug fixed**: GUI crashed on every start due to `text("").size(0)` in gui.rs (port cell for environments without ports). `cosmic-text` panics on zero line height, which hit the ObjC boundary causing SIGABRT. Fixed by removing `.size(0)`.
 
 2. **Code quality fixes** (all from the review list):
    - `state_variant_eq` now compares `Other` inner strings (was using `mem::discriminant` only)
@@ -59,6 +61,7 @@ src/
   watcher.rs        # FSEvents watcher on ~/.dev-runner/, emits WatchEvent
   notifications.rs  # Notifier: sound (rodio), speech (tts AppKit), macOS notifications
                     # Batched audio, transition detection, global + per-unit mute/notification toggles
+                    # All macOS-specific code cfg-gated; compiles cross-platform
   gui.rs            # iced GUI: cards, SVG toolbar icons, tooltips, per-unit toggles, hover, Cmd+Q
                     # Dock icon via objc2 NSApplication.setApplicationIconImage
   tui.rs            # ratatui TUI: mouse support, unit selection, auto-scroll
@@ -79,15 +82,18 @@ assets/
 ### Dependencies
 
 ```toml
+# Cross-platform
 notify = "7"                          # filesystem watcher
 dirs = "6"                            # home dir
-nix = "0.29"                          # PID liveness + SIGTERM
+nix = "0.29"                          # PID liveness + SIGTERM (Unix only)
 clap = "4"                            # CLI
+ratatui = "0.29" + crossterm = "0.28" # TUI (optional)
+iced = "0.13" (tokio, svg, image)     # GUI (optional)
+
+# macOS only (cfg-gated)
 rodio = "0.21"                        # system sounds (.aiff playback)
 tts = "0.26"                          # speech (AppKit backend)
 mac-notification-sys = "0.6"          # notification center
-ratatui = "0.29" + crossterm = "0.28" # TUI (optional)
-iced = "0.13" (tokio, svg, image)     # GUI (optional)
 objc2 = "0.5"                         # macOS dock icon
 objc2-foundation = "0.2"              # NSData
 objc2-app-kit = "0.2"                 # NSApplication, NSImage
@@ -96,11 +102,11 @@ objc2-app-kit = "0.2"                 # NSApplication, NSImage
 ### CI / Publishing
 
 - `.github/workflows/ci.yml` — test + fmt + clippy (with components), matrix build (macOS x86_64 + aarch64)
-- `.github/workflows/publish.yml` — auto-publish to crates.io on version bump, `published` output gates release, ubuntu-latest, concurrency guard
+- `.github/workflows/publish.yml` — auto-publish to crates.io on version bump, `published` output gates release, ubuntu-latest (cross-platform build), concurrency guard
 - `.github/workflows/release.yml` — workflow_call only (no push:tags), builds stripped binaries with distinct asset names, softprops/action-gh-release@v2
 - `LICENSE-MIT` + `LICENSE-APACHE` — dual licensed
 - `resume.md` and `create-test-envs.sh` excluded from crate tarball
-- Remote: `git@github.com:dnorman/sutra.git` (working branch `master`, PR target `main`)
+- Remote: `git@github.com:dnorman/sutra.git` (branch `main`)
 
 ### Test data
 
@@ -122,10 +128,7 @@ objc2-app-kit = "0.2"                 # NSApplication, NSImage
 
 ### Immediate next steps
 
-1. Run `cargo clippy -- -D warnings` to verify zero clippy warnings (should pass after Default impl + redundant pattern fix).
-2. Commit and push the latest round of fixes.
-3. Do `cargo publish` locally for the initial crates.io publish.
-4. Set `CARGO_REGISTRY_TOKEN` secret in GitHub repo settings.
+1. GitHub issue #1 tracks Linux/Windows GUI support (notifications, TTS, sounds).
 
 ## Commands
 

@@ -7,7 +7,7 @@
 [![CI](https://github.com/dnorman/sutra/actions/workflows/ci.yml/badge.svg)](https://github.com/dnorman/sutra/actions/workflows/ci.yml)
 [![Crates.io](https://img.shields.io/crates/v/sutra.svg)](https://crates.io/crates/sutra)
 
-A macOS status dashboard for dev environments. Monitors a well-known state folder for environment meta and per-unit status files, rendering everything in a native GUI (iced) or TUI (ratatui) with sounds, speech, and notifications on state transitions.
+A dev environment status dashboard. Monitors a well-known state folder for environment meta and per-unit status files, rendering everything in a native GUI (iced) or TUI (ratatui). On macOS, state transitions trigger system sounds, speech, and native notifications.
 
 ## Install
 
@@ -23,7 +23,19 @@ sutra mon --foreground      # GUI, attached to terminal
 sutra mon --tui             # terminal UI
 ```
 
-Both interfaces support per-unit and global toggles for sound and notification muting, light/dark mode, environment termination, and opening browser ports.
+Both interfaces support per-unit and global toggles for sound and notification muting, environment termination, and opening browser ports.
+
+## Platform support
+
+| Feature | macOS | Linux |
+|---|---|---|
+| GUI (iced) | yes | yes |
+| TUI (ratatui) | yes | yes |
+| System sounds | yes | -- |
+| Speech (TTS) | yes | -- |
+| Native notifications | yes | -- |
+
+Linux/Windows audio and notification support is tracked in [#1](https://github.com/dnorman/sutra/issues/1).
 
 ## Features
 
