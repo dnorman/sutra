@@ -1,0 +1,34 @@
+[package]
+name = "sutra"
+version = "0.1.0"
+edition = "2024"
+description = "Dev environment status dashboard — watches ~/.dev-runner/ and stitches unit state into a glanceable GUI or TUI with sounds, speech, and notifications"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/dnorman/sutra"
+homepage = "https://github.com/dnorman/sutra"
+keywords = ["dev-tools", "dashboard", "tui", "gui", "notifications"]
+categories = ["command-line-utilities", "development-tools"]
+
+[features]
+default = ["tui", "gui"]
+tui = ["dep:ratatui", "dep:crossterm"]
+gui = ["dep:iced"]
+
+[dependencies]
+notify = "7"
+dirs = "6"
+nix = { version = "0.29", features = ["signal", "process"] }
+clap = { version = "4", features = ["derive"] }
+
+rodio = { version = "0.21", features = ["symphonia-aiff"] }
+tts = "0.26"
+mac-notification-sys = "0.6"
+
+ratatui = { version = "0.29", optional = true }
+crossterm = { version = "0.28", optional = true }
+iced = { version = "0.13", features = ["tokio", "svg", "image"], optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.5"
+objc2-foundation = { version = "0.2", features = ["NSData"] }
+objc2-app-kit = { version = "0.2", features = ["NSApplication", "NSImage", "NSRunningApplication"] }

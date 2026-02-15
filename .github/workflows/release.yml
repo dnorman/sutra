@@ -1,0 +1,38 @@
+name: Release
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-release:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-apple-darwin
+            asset: sutra-macos-x86_64
+          - target: aarch64-apple-darwin
+            asset: sutra-macos-aarch64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.version || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - run: cargo build --release --target ${{ matrix.target }}
+      - run: strip target/${{ matrix.target }}/release/sutra
+      - uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ inputs.version || github.ref_name }}
+          name: Release ${{ inputs.version || github.ref_name }}
+          files: target/${{ matrix.target }}/release/sutra
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
