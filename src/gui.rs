@@ -106,7 +106,7 @@ fn palette(dark_mode: bool) -> Palette {
 #[derive(Debug, Clone)]
 enum Message {
     Tick,
-    WatchEvent(WatchEvent),
+    WatchEvent,
     ToggleGlobalMute,
     ToggleUnitMute {
         env_id: String,
@@ -172,7 +172,7 @@ pub fn run() {
 
 fn update(app: &mut App, message: Message) -> iced::Task<Message> {
     match message {
-        Message::Tick | Message::WatchEvent(_) => {
+        Message::Tick | Message::WatchEvent => {
             app.envs = model::load_all();
             app.notifier.process(&app.envs);
         }
@@ -203,10 +203,12 @@ fn update(app: &mut App, message: Message) -> iced::Task<Message> {
                 .spawn();
         }
         Message::TerminateEnv { pid } => {
-            let _ = nix::sys::signal::kill(
-                nix::unistd::Pid::from_raw(pid as i32),
-                nix::sys::signal::Signal::SIGHUP,
-            );
+            if let Ok(raw_pid) = i32::try_from(pid) {
+                let _ = nix::sys::signal::kill(
+                    nix::unistd::Pid::from_raw(raw_pid),
+                    nix::sys::signal::Signal::SIGTERM,
+                );
+            }
         }
         Message::HoverUnit { env_id, unit_name } => {
             app.hovered_unit = Some((env_id, unit_name));
@@ -614,8 +616,8 @@ fn watch_registry() -> impl iced::futures::Stream<Item = Message> {
             }
         });
 
-        while let Some(event) = async_rx.next().await {
-            let _ = sender.send(Message::WatchEvent(event)).await;
+        while async_rx.next().await.is_some() {
+            let _ = sender.send(Message::WatchEvent).await;
         }
     })
 }

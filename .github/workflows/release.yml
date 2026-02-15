@@ -6,9 +6,6 @@ on:
       version:
         required: true
         type: string
-  push:
-    tags:
-      - "v*"
 
 jobs:
   build-release:
@@ -23,16 +20,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.version || github.ref }}
+          ref: ${{ inputs.version }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
       - run: cargo build --release --target ${{ matrix.target }}
       - run: strip target/${{ matrix.target }}/release/sutra
-      - uses: softprops/action-gh-release@v1
+      - run: mv target/${{ matrix.target }}/release/sutra ${{ matrix.asset }}
+      - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.version || github.ref_name }}
-          name: Release ${{ inputs.version || github.ref_name }}
-          files: target/${{ matrix.target }}/release/sutra
+          tag_name: ${{ inputs.version }}
+          name: Release ${{ inputs.version }}
+          files: ${{ matrix.asset }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::mpsc;
 
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
@@ -23,7 +23,7 @@ pub struct RegistryWatcher {
 /// Extract the hash ID from a filename.
 /// - Meta file: "df79fed95eebc05d" → "df79fed95eebc05d"
 /// - Status file: "df79fed95eebc05d.server.status" → "df79fed95eebc05d"
-fn extract_hash_id(path: &PathBuf) -> Option<String> {
+fn extract_hash_id(path: &Path) -> Option<String> {
     let fname = path.file_name()?.to_str()?;
 
     // Status files (both conventions):

@@ -27,25 +27,48 @@ cargo install --path .
 ## Usage
 
 ```sh
-sutra              # launch GUI monitor (default)
-sutra mon          # same, explicit
-sutra mon --tui    # launch terminal UI
+sutra                       # launch GUI (backgrounds by default)
+sutra mon                   # same, explicit
+sutra mon --foreground      # GUI, attached to terminal (for debugging)
+sutra mon --tui             # launch terminal UI
 ```
 
 ### GUI controls
 
-- Click the speaker icon to toggle global mute
-- Click per-unit speaker/bell icons to mute sound or notifications individually
-- Click the sun/moon icon to toggle light/dark mode
+- **Speaker icon** -- toggle global sound mute
+- **Bell icon** -- toggle global notifications
+- **Sun/moon icon** -- toggle light/dark mode
+- **Per-unit speaker/bell icons** -- mute sound or notifications per unit
+- **Red square** on environment header -- terminate environment (SIGTERM)
+- **↗** next to units with ports -- open `localhost:{port}` in browser
+- **Cmd+Q** -- quit
 
 ### TUI controls
 
 | Key | Action |
 |-----|--------|
 | `q` | Quit |
-| `r` | Refresh |
-| `j`/`k` | Scroll |
-| `m` | Toggle mute |
+| `r` | Force refresh |
+| `j` / `k` / `↑` / `↓` | Select previous/next unit |
+| `m` | Toggle global sound mute |
+| `n` | Toggle global notifications |
+| `M` | Toggle sound mute for selected unit |
+| `N` | Toggle notifications for selected unit |
+| `o` | Open browser for selected unit's port |
+| `x` | Terminate selected unit's environment (SIGTERM) |
+
+Mouse: click to select a unit, scroll wheel to move selection.
+
+### State indicators
+
+```
+○  Stopped/None     (empty circle)
+◌  Starting         (dotted circle)
+◑  Building         (half-filled circle)
+●  Running/Ready    (filled circle)
+✗  Failed           (X mark)
+◆  Other            (diamond)
+```
 
 ## How it works
 
@@ -84,10 +107,10 @@ Well-known states (`starting`, `building`, `running`, `ready`, `failed`, `stoppe
 When a unit changes state, sutra can:
 
 - Play a system sound (Submarine for building, Ping for ready, Basso for failed)
-- Speak the transition ("server ready", "vite building")
+- Speak the transition ("server ready, vite building" -- batched into one utterance)
 - Send a macOS notification
 
-All of this is suppressed on first load (snapshot only) and respects mute settings.
+All of this is suppressed on first load (snapshot only) and respects mute settings. When multiple units change simultaneously, audio is batched: one sound (highest priority) and one combined speech utterance.
 
 ### Voice
 

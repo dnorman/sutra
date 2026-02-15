@@ -8,6 +8,9 @@ repository = "https://github.com/dnorman/sutra"
 homepage = "https://github.com/dnorman/sutra"
 keywords = ["dev-tools", "dashboard", "tui", "gui", "notifications"]
 categories = ["command-line-utilities", "development-tools"]
+readme = "README.md"
+rust-version = "1.85"
+exclude = ["resume.md", "create-test-envs.sh"]
 
 [features]
 default = ["tui", "gui"]

@@ -130,15 +130,17 @@ impl App {
         }
     }
 
-    /// Send SIGHUP to the environment of the currently selected unit.
+    /// Send SIGTERM to the environment of the currently selected unit.
     fn terminate_selected_env(&self) {
         if let Some(r) = self.selected_unit_ref() {
             let env = &self.envs[r.env_index];
             if env.alive {
-                let _ = nix::sys::signal::kill(
-                    nix::unistd::Pid::from_raw(env.pid as i32),
-                    nix::sys::signal::Signal::SIGHUP,
-                );
+                if let Ok(raw_pid) = i32::try_from(env.pid) {
+                    let _ = nix::sys::signal::kill(
+                        nix::unistd::Pid::from_raw(raw_pid),
+                        nix::sys::signal::Signal::SIGTERM,
+                    );
+                }
             }
         }
     }

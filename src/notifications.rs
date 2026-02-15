@@ -28,6 +28,12 @@ pub struct Notifier {
     first_load: bool,
 }
 
+impl Default for Notifier {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Notifier {
     pub fn new() -> Self {
         let (tx, rx) = mpsc::channel();
@@ -35,6 +41,8 @@ impl Notifier {
         let thread = thread::spawn(move || {
             Self::audio_thread(rx);
         });
+
+        let _ = mac_notification_sys::set_application("io.github.dnorman.sutra");
 
         Notifier {
             tx,
@@ -135,13 +143,6 @@ impl Notifier {
                 }
             };
 
-            // Skip if transitioning from None or Other
-            if let Some(old) = self.prev_states.get(key) {
-                if matches!(old, State::None | State::Other(_)) && matches!(new_state, State::None | State::Other(_)) {
-                    continue;
-                }
-            }
-
             let Some(sound) = sound else { continue };
 
             let uk = unit_key(&key.0, &key.1);
@@ -152,7 +153,6 @@ impl Notifier {
             if !notifications_off {
                 let unit_name = &key.1;
                 let state_str = new_state.to_string();
-                let _ = mac_notification_sys::set_application("io.github.dnorman.sutra");
                 let _ = mac_notification_sys::send_notification(
                     &format!("sutra — {}", unit_name),
                     None,
