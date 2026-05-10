@@ -131,15 +131,19 @@ impl App {
     }
 
     /// Send SIGTERM to the environment of the currently selected unit.
+    /// Targets the process group (negative PID) first so children of
+    /// the supervisor die too; falls back to single-PID signal if the
+    /// env isn't a process-group leader.
     fn terminate_selected_env(&self) {
         if let Some(r) = self.selected_unit_ref() {
             let env = &self.envs[r.env_index];
             if env.alive {
                 if let Ok(raw_pid) = i32::try_from(env.pid) {
-                    let _ = nix::sys::signal::kill(
-                        nix::unistd::Pid::from_raw(raw_pid),
-                        nix::sys::signal::Signal::SIGTERM,
-                    );
+                    let group = nix::unistd::Pid::from_raw(-raw_pid);
+                    let single = nix::unistd::Pid::from_raw(raw_pid);
+                    if nix::sys::signal::kill(group, nix::sys::signal::Signal::SIGTERM).is_err() {
+                        let _ = nix::sys::signal::kill(single, nix::sys::signal::Signal::SIGTERM);
+                    }
                 }
             }
         }

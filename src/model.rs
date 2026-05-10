@@ -81,6 +81,12 @@ impl UnitStatus {
     /// Parse a status value like "building: Compiling Rust bindings".
     /// The `name` comes from the status filename, not the content.
     /// Uses State::None for empty content.
+    ///
+    /// The detail separator is `:` (any surrounding whitespace is
+    /// trimmed). Both `building: cargo` and `building:cargo` parse the
+    /// same way — accepting both is friendlier to dev-script authors
+    /// who forget the space and would otherwise see their state fall
+    /// through to `State::Other`.
     pub fn parse(name: &str, content: &str) -> UnitStatus {
         let trimmed = content.trim();
         if trimmed.is_empty() {
@@ -91,8 +97,16 @@ impl UnitStatus {
             };
         }
 
-        let (state_str, detail) = match trimmed.split_once(": ") {
-            Some((s, d)) => (s, Some(d.to_string())),
+        let (state_str, detail) = match trimmed.split_once(':') {
+            Some((s, d)) => {
+                let detail = d.trim();
+                let detail = if detail.is_empty() {
+                    None
+                } else {
+                    Some(detail.to_string())
+                };
+                (s.trim_end(), detail)
+            }
             None => (trimmed, None),
         };
 
@@ -264,4 +278,91 @@ pub fn load_all() -> Vec<Environment> {
 
     envs.sort_by(|a, b| a.dir.cmp(&b.dir));
     envs
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_state_canonical() {
+        assert_eq!(State::parse("starting"), State::Starting);
+        assert_eq!(State::parse("building"), State::Building);
+        assert_eq!(State::parse("running"), State::Running);
+        assert_eq!(State::parse("ready"), State::Ready);
+        assert_eq!(State::parse("failed"), State::Failed);
+        assert_eq!(State::parse("stopped"), State::Stopped);
+    }
+
+    #[test]
+    fn parse_state_unknown_falls_to_other() {
+        assert_eq!(State::parse("done"), State::Other("done".into()));
+        // Case-sensitive: capitalized variants are not canonical.
+        assert_eq!(State::parse("Ready"), State::Other("Ready".into()));
+    }
+
+    #[test]
+    fn unit_parse_state_only() {
+        let u = UnitStatus::parse("server", "ready");
+        assert_eq!(u.state, State::Ready);
+        assert_eq!(u.detail, None);
+    }
+
+    #[test]
+    fn unit_parse_state_with_detail_canonical_separator() {
+        let u = UnitStatus::parse("server", "building: cargo");
+        assert_eq!(u.state, State::Building);
+        assert_eq!(u.detail.as_deref(), Some("cargo"));
+    }
+
+    #[test]
+    fn unit_parse_state_with_detail_no_space_after_colon() {
+        // Lenient: "building:cargo" should parse same as "building: cargo".
+        let u = UnitStatus::parse("server", "building:cargo");
+        assert_eq!(u.state, State::Building);
+        assert_eq!(u.detail.as_deref(), Some("cargo"));
+    }
+
+    #[test]
+    fn unit_parse_state_trailing_colon_no_detail() {
+        // "failed:" with no detail should give state=Failed, detail=None.
+        let u = UnitStatus::parse("server", "failed:");
+        assert_eq!(u.state, State::Failed);
+        assert_eq!(u.detail, None);
+    }
+
+    #[test]
+    fn unit_parse_extra_whitespace() {
+        let u = UnitStatus::parse("server", "  building :  cargo  ");
+        assert_eq!(u.state, State::Building);
+        assert_eq!(u.detail.as_deref(), Some("cargo"));
+    }
+
+    #[test]
+    fn unit_parse_empty_is_none() {
+        let u = UnitStatus::parse("server", "");
+        assert_eq!(u.state, State::None);
+        assert_eq!(u.detail, None);
+    }
+
+    #[test]
+    fn unit_parse_whitespace_only_is_none() {
+        let u = UnitStatus::parse("server", "   \n  ");
+        assert_eq!(u.state, State::None);
+    }
+
+    #[test]
+    fn meta_filename_validation() {
+        assert!(is_meta_file("a"));
+        assert!(is_meta_file("df79fed95eebc05d"));
+        assert!(is_meta_file("0123456789abcdef"));
+        assert!(!is_meta_file(""));
+        assert!(!is_meta_file(".hidden"));
+        assert!(!is_meta_file("has.dot"));
+        assert!(!is_meta_file("nothex_g"));
+        // Note: STATE_SPEC.md says "lowercase hex" but the code uses
+        // `is_ascii_hexdigit` which accepts both cases. Documented as
+        // permissive-but-conventional rather than enforced.
+        assert!(is_meta_file("ABCDEF"));
+    }
 }

@@ -58,6 +58,13 @@ const HELP_DOC_BLOB_URL: &str = "https://github.com/dnorman/sutra/blob/main/docs
 /// Drop-into-an-agent prompt. Available via the help panel's "Copy" button
 /// — the user pastes it into Claude Code / Cursor / etc. and the agent
 /// fetches the doc above and updates their dev script.
+///
+/// The URL pins to `main` rather than a release tag because the doc is a
+/// living "best-practices" reference; we want shipped binaries to point
+/// at the latest patterns, not a frozen snapshot. The doc structure is
+/// stable (markdown, agent-targeted preamble, contract, recipe, checklist)
+/// and changes are additive in practice — if that ever stops being true,
+/// switch to a `vX.Y` tag and bump it on release.
 const HELP_AGENT_PROMPT: &str = "Make my project's dev script sutra-compatible by following:
 https://raw.githubusercontent.com/dnorman/sutra/main/docs/INTEGRATION.md
 
@@ -162,6 +169,8 @@ enum Message {
     ToggleUnitNotifications { env_id: String, unit_name: String },
     ToggleTheme,
     ToggleHelp,
+    OpenHelp,
+    CloseHelp,
     CopyToClipboard(String),
     OpenBrowser { port: u16 },
     OpenUrl(String),
@@ -245,6 +254,17 @@ fn update(app: &mut App, message: Message) -> iced::Task<Message> {
         Message::ToggleHelp => {
             app.show_help = !app.show_help;
         }
+        Message::OpenHelp => {
+            // Idempotent: '?' from the keyboard fires this. Open-only so
+            // typing '?' while focused inside the help panel's editor
+            // doesn't snap the panel closed.
+            app.show_help = true;
+        }
+        Message::CloseHelp => {
+            // Idempotent: Esc fires this. No-op when the panel isn't
+            // open, so it doesn't trample any future Esc behavior.
+            app.show_help = false;
+        }
         Message::CopyToClipboard(content) => {
             app.copied_flash = true;
             return iced::clipboard::write::<Message>(content);
@@ -271,14 +291,38 @@ fn update(app: &mut App, message: Message) -> iced::Task<Message> {
                 .spawn();
         }
         Message::OpenUrl(url) => {
-            let _ = std::process::Command::new("open").arg(url).spawn();
+            // Cross-platform browser launcher. macOS: `open`, Linux:
+            // `xdg-open`, Windows: `start` via cmd. We probe one and
+            // ignore failure — there's no useful UI for "couldn't open
+            // the link", and the user can read the URL on screen.
+            #[cfg(target_os = "macos")]
+            let opener = ("open", None::<&str>);
+            #[cfg(target_os = "linux")]
+            let opener = ("xdg-open", None::<&str>);
+            #[cfg(target_os = "windows")]
+            let opener = ("cmd", Some("/C start"));
+            #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+            let opener = ("xdg-open", None::<&str>); // best-guess fallback
+
+            let mut cmd = std::process::Command::new(opener.0);
+            if let Some(arg) = opener.1 {
+                cmd.arg(arg);
+            }
+            let _ = cmd.arg(url).spawn();
         }
         Message::TerminateEnv { pid } => {
             if let Ok(raw_pid) = i32::try_from(pid) {
-                let _ = nix::sys::signal::kill(
-                    nix::unistd::Pid::from_raw(raw_pid),
-                    nix::sys::signal::Signal::SIGTERM,
-                );
+                // Prefer killing the entire process group so children of
+                // the supervisor (cargo-watch, vite, metro, …) die too.
+                // Negative PID = "send to process group with that PGID".
+                // If the env isn't a PG leader (PGID != PID), the group
+                // signal returns ESRCH and we fall back to signaling
+                // just the supervisor PID.
+                let group = nix::unistd::Pid::from_raw(-raw_pid);
+                let single = nix::unistd::Pid::from_raw(raw_pid);
+                if nix::sys::signal::kill(group, nix::sys::signal::Signal::SIGTERM).is_err() {
+                    let _ = nix::sys::signal::kill(single, nix::sys::signal::Signal::SIGTERM);
+                }
             }
         }
         Message::HoverUnit { env_id, unit_name } => {
@@ -583,11 +627,19 @@ fn help_panel<'a>(
     });
 
     // GitHub link — clickable, opens in browser. Useful for the human
-    // who just wants to read it themselves rather than hand it off.
+    // who just wants to read it themselves rather than hand it off to
+    // an agent. Trailing "↗" gives the link an external-link affordance
+    // since iced text doesn't underline-on-hover out of the box.
     let github_row = row![
         text("Read on GitHub: ").size(11).color(muted),
-        mouse_area(text(HELP_DOC_BLOB_URL.to_string()).size(11).color(cyan))
-            .on_press(Message::OpenUrl(HELP_DOC_BLOB_URL.to_string())),
+        mouse_area(
+            row![
+                text(HELP_DOC_BLOB_URL.to_string()).size(11).color(cyan),
+                text(" \u{2197}").size(11).color(cyan),
+            ]
+            .align_y(iced::Alignment::Center)
+        )
+        .on_press(Message::OpenUrl(HELP_DOC_BLOB_URL.to_string())),
     ]
     .align_y(iced::Alignment::Center);
 
@@ -891,10 +943,17 @@ fn subscription(_app: &App) -> Subscription<Message> {
                 }
             }
         }
+        // '?' opens the help panel (open-only — won't close it if you
+        // type '?' while focused inside the panel's read-only editor).
         if let iced::keyboard::Key::Character(c) = key.as_ref() {
             if c == "?" {
-                return Some(Message::ToggleHelp);
+                return Some(Message::OpenHelp);
             }
+        }
+        // Esc closes the help panel (no-op when it's already closed,
+        // so it doesn't conflict with any future Esc binding).
+        if let iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape) = key.as_ref() {
+            return Some(Message::CloseHelp);
         }
         None
     });
