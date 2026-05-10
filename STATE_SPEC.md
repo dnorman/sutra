@@ -27,10 +27,10 @@ Created automatically by the environment runner or sutra if it does not exist.
 ~/.dev-runner/<id>
 ```
 
-`<id>` is a hex string (lowercase `[0-9a-f]+`) that uniquely identifies an environment instance. Typically a hash derived from the project directory path.
+`<id>` is a hex string that uniquely identifies an environment instance. Typically a hash derived from the project directory path. Lowercase `[0-9a-f]+` is the convention; the parser accepts uppercase hex too but writers should stick to lowercase.
 
 A valid meta filename:
-- Contains only ASCII hex digits
+- Contains only ASCII hex digits (`[0-9a-fA-F]+`; lowercase by convention)
 - Does not start with `.`
 - Does not contain `.`
 
@@ -100,7 +100,7 @@ Single line of text:
 <state>[: <detail>]
 ```
 
-The state is a lowercase keyword. The optional detail (after `": "`) is freeform text providing additional context.
+The state is a lowercase keyword. The optional detail (after `:`) is freeform text providing additional context. The canonical separator is `": "` (colon then space) for readability; the parser accepts `:` with or without surrounding whitespace and trims it.
 
 ### Well-known states
 
@@ -205,6 +205,8 @@ Sound mute and notification suppression are independent — you can mute audio w
 
 - sutra recognizes both dotted (`.hash.unit.status`) and non-dotted (`hash.unit.status`) conventions
 - Meta filenames must be pure hex — any file containing `.` is treated as a status file or ignored
+- Meta filename hex digits are case-permissive (parser uses `is_ascii_hexdigit`); writers should use lowercase by convention
 - Keys in meta files are case-sensitive (`DIR`, not `dir`)
 - State strings in status files are case-sensitive (`ready`, not `Ready`)
+- Detail separator is `:` with optional surrounding whitespace (the parser trims); the canonical form `<state>: <detail>` is recommended for readability
 - The `~/.dev-runner/` path is not configurable (hardcoded convention)
