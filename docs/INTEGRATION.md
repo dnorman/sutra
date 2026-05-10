@@ -202,7 +202,7 @@ until you `clear_all_status` on shutdown.
 
 #### Self-clearing transient units
 
-Short-lived units (`build`, `populate`, `migrate`) shouldn't linger as
+Short-lived units (`build`, `seed`, `migrate`) shouldn't linger as
 stale `ready` rows after they finish. Have them remove their own file
 a beat after completing:
 
@@ -356,7 +356,7 @@ A typical web stack might emit:
 | `vite`     | `starting`, `ready` |
 | `metro`    | `starting`, `running`, `failed: timeout` |
 | `mobile`   | `building: rust bindings`, `building: xcode`, `ready` |
-| `populate` | `running`, `ready`, `failed` (self-clearing — see "transient units" above) |
+| `seed`     | `running`, `ready`, `failed` (self-clearing — see "transient units" above) |
 
 Names are arbitrary — pick whatever makes sense and is short enough to
 fit in a column.
