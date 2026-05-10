@@ -1,4 +1,6 @@
-use iced::widget::{Column, column, container, mouse_area, row, scrollable, svg, text, tooltip};
+use iced::widget::{
+    Column, column, container, mouse_area, row, scrollable, svg, text, text_editor, tooltip,
+};
 use iced::{Element, Font, Subscription, Theme, color};
 
 use crate::model::{self, Environment, State};
@@ -42,6 +44,25 @@ const ICON_BELL: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" width="24" 
 const ICON_BELL_OFF: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M18.63 13A17.89 17.89 0 0 1 18 8"/><path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14"/><path d="M18 8a6 6 0 0 0-9.33-5"/><line x1="1" y1="1" x2="23" y2="23"/></svg>"#;
 
 const ICON_SQUARE: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>"#;
+
+const ICON_HELP_CIRCLE: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>"#;
+
+const ICON_COPY: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>"#;
+
+const ICON_CHECK: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>"#;
+
+/// Human-readable GitHub URL for the integration guide. Shown as a
+/// clickable link below the agent prompt.
+const HELP_DOC_BLOB_URL: &str = "https://github.com/dnorman/sutra/blob/main/docs/INTEGRATION.md";
+
+/// Drop-into-an-agent prompt. Available via the help panel's "Copy" button
+/// — the user pastes it into Claude Code / Cursor / etc. and the agent
+/// fetches the doc above and updates their dev script.
+const HELP_AGENT_PROMPT: &str = "Make my project's dev script sutra-compatible by following:
+https://raw.githubusercontent.com/dnorman/sutra/main/docs/INTEGRATION.md
+
+If a dev script already exists, update it. Otherwise create one.
+";
 
 /// Build an iced Svg handle from an embedded byte slice, rendered at the given size and color.
 fn icon_svg(data: &'static [u8], size: f32, color: iced::Color) -> Element<'static, Message> {
@@ -140,7 +161,11 @@ enum Message {
     ToggleGlobalNotifications,
     ToggleUnitNotifications { env_id: String, unit_name: String },
     ToggleTheme,
+    ToggleHelp,
+    CopyToClipboard(String),
     OpenBrowser { port: u16 },
+    OpenUrl(String),
+    PromptAction(text_editor::Action),
     TerminateEnv { pid: u32 },
     HoverUnit { env_id: String, unit_name: String },
     UnhoverUnit,
@@ -152,6 +177,15 @@ struct App {
     notifier: Notifier,
     dark_mode: bool,
     hovered_unit: Option<(String, String)>, // (env_id, unit_name)
+    show_help: bool,
+    /// Set true when the user clicks the help-panel Copy button. Cleared
+    /// on the next periodic Tick (~2s) so the button visibly toggles to
+    /// "Copied!" and back without needing an async timer.
+    copied_flash: bool,
+    /// Backing store for the help-panel prompt's `text_editor` widget.
+    /// We accept all non-Edit actions so the user can select and scroll
+    /// the prompt text, but block Edit actions to keep it read-only.
+    prompt_content: text_editor::Content,
 }
 
 pub fn run() {
@@ -178,6 +212,9 @@ pub fn run() {
                     notifier,
                     dark_mode: false,
                     hovered_unit: None,
+                    show_help: false,
+                    copied_flash: false,
+                    prompt_content: text_editor::Content::with_text(HELP_AGENT_PROMPT.trim_end()),
                 },
                 iced::Task::none(),
             )
@@ -187,7 +224,15 @@ pub fn run() {
 
 fn update(app: &mut App, message: Message) -> iced::Task<Message> {
     match message {
-        Message::Tick | Message::WatchEvent => {
+        Message::Tick => {
+            app.envs = model::load_all();
+            app.notifier.process(&app.envs);
+            // Clear the copy-flash on the next periodic refresh. WatchEvent
+            // doesn't clear it, so unrelated filesystem activity won't snap
+            // the "Copied!" label away early.
+            app.copied_flash = false;
+        }
+        Message::WatchEvent => {
             app.envs = model::load_all();
             app.notifier.process(&app.envs);
         }
@@ -196,6 +241,20 @@ fn update(app: &mut App, message: Message) -> iced::Task<Message> {
         }
         Message::ToggleTheme => {
             app.dark_mode = !app.dark_mode;
+        }
+        Message::ToggleHelp => {
+            app.show_help = !app.show_help;
+        }
+        Message::CopyToClipboard(content) => {
+            app.copied_flash = true;
+            return iced::clipboard::write::<Message>(content);
+        }
+        Message::PromptAction(action) => {
+            // Read-only: drop Edit actions, perform everything else (cursor
+            // movement, click/drag selection, scroll, SelectAll, etc.).
+            if !matches!(action, text_editor::Action::Edit(_)) {
+                app.prompt_content.perform(action);
+            }
         }
         Message::ToggleUnitMute { env_id, unit_name } => {
             app.notifier.toggle_unit_mute(&env_id, &unit_name);
@@ -210,6 +269,9 @@ fn update(app: &mut App, message: Message) -> iced::Task<Message> {
             let _ = std::process::Command::new("open")
                 .arg(format!("http://localhost:{port}"))
                 .spawn();
+        }
+        Message::OpenUrl(url) => {
+            let _ = std::process::Command::new("open").arg(url).spawn();
         }
         Message::TerminateEnv { pid } => {
             if let Ok(raw_pid) = i32::try_from(pid) {
@@ -252,6 +314,9 @@ fn view(app: &App) -> Element<'_, Message> {
         let theme_icon = if app.dark_mode { ICON_SUN } else { ICON_MOON };
 
         let icon_color = pal.fg;
+        // Help icon adopts the cyan accent when the panel is open, so it
+        // reads as the active selection in the toolbar.
+        let help_color = if app.show_help { pal.cyan } else { icon_color };
 
         let mute_tip = if app.notifier.global_mute {
             "Unmute all sounds"
@@ -268,9 +333,22 @@ fn view(app: &App) -> Element<'_, Message> {
         } else {
             "Switch to dark mode"
         };
+        let help_tip = if app.show_help {
+            "Hide integration help"
+        } else {
+            "Integration help"
+        };
 
         let toolbar_row = row![
             iced::widget::horizontal_space(),
+            tooltip(
+                mouse_area(icon_svg(ICON_HELP_CIRCLE, 16.0, help_color))
+                    .on_press(Message::ToggleHelp),
+                tip_bubble(help_tip, &pal),
+                tooltip::Position::Bottom,
+            )
+            .gap(4),
+            text("\u{00b7}").size(8).color(pal.muted),
             tooltip(
                 mouse_area(icon_svg(mute_icon, 16.0, icon_color))
                     .on_press(Message::ToggleGlobalMute),
@@ -301,6 +379,14 @@ fn view(app: &App) -> Element<'_, Message> {
             .padding(iced::Padding::from([6.0, 16.0]))
             .width(iced::Fill)
     };
+
+    if app.show_help {
+        return column![
+            toolbar,
+            help_panel(&pal, &app.prompt_content, app.copied_flash)
+        ]
+        .into();
+    }
 
     if app.envs.is_empty() {
         let dir_label = model::state_dir()
@@ -345,6 +431,192 @@ fn view(app: &App) -> Element<'_, Message> {
                 .width(iced::Fill)
         ),
     ]
+    .into()
+}
+
+/// Help panel — explains the `~/.dev-runner/` contract that any dev
+/// script needs to satisfy to show up in sutra, and offers a copyable
+/// agent prompt that points at the full integration guide on GitHub.
+/// Toggled from the toolbar `?` icon (or pressing `?`).
+///
+/// Returns an `Element<'a>` (not `'static`) because the prompt block
+/// embeds a `text_editor` borrowing from `prompt_content`.
+fn help_panel<'a>(
+    pal: &Palette,
+    prompt_content: &'a text_editor::Content,
+    copied_flash: bool,
+) -> Element<'a, Message> {
+    let muted = pal.muted;
+    let fg = pal.fg;
+    let bg = pal.hover_bg;
+    let border = pal.card_border;
+    let cyan = pal.cyan;
+
+    let title = text("Integration").size(15).color(fg);
+
+    let intro = text(
+        "Sutra watches ~/.dev-runner/. Any dev script that writes the \
+         right files gets a live status row — no daemon, no IPC.",
+    )
+    .size(12)
+    .color(muted);
+
+    // -- Meta file -------------------------------------------------------
+    // Path in mono (it's a literal); description lines in default font
+    // since they're prose. The path always comes first so the eye lands
+    // on "where" before "what / when".
+    let meta_header = text("Meta file").size(13).color(fg);
+    let meta_body = column![
+        text("~/.dev-runner/<id>").size(11).color(fg).font(MONO),
+        text("KEY=VALUE per line. Required: DIR, PID. Optional: STARTED, *_PORT.")
+            .size(11)
+            .color(muted),
+        text("Write once at startup. Delete on exit.")
+            .size(11)
+            .color(muted),
+    ]
+    .spacing(3);
+
+    // -- Status file -----------------------------------------------------
+    let status_header = text("Status file").size(13).color(fg);
+    let status_body = column![
+        text("~/.dev-runner/<id>.<unit>.status")
+            .size(11)
+            .color(fg)
+            .font(MONO),
+        text("Single line: <state>[: <detail>]")
+            .size(11)
+            .color(fg)
+            .font(MONO),
+        text("States: starting, building, running, ready, failed, stopped.")
+            .size(11)
+            .color(muted),
+        text("Overwrite (don't append) on each transition. The detail is freeform.")
+            .size(11)
+            .color(muted),
+    ]
+    .spacing(3);
+
+    // Thin horizontal divider — the contract section reads as facts,
+    // the agent block below reads as the call to action.
+    let divider_color = pal.card_border;
+    let divider = container(text(""))
+        .width(iced::Fill)
+        .height(1.0)
+        .style(move |_theme| container::Style {
+            background: Some(iced::Background::Color(divider_color)),
+            border: iced::Border::default(),
+            shadow: iced::Shadow::default(),
+            text_color: None,
+        });
+
+    // -- Hand-off to an agent --------------------------------------------
+    let agent_header = text("Hand it to an agent").size(13).color(fg);
+
+    let agent_intro = text(
+        "Paste this into Claude Code, Cursor, or any code agent — \
+         it'll fetch the full guide and wire your dev script up.",
+    )
+    .size(12)
+    .color(muted);
+
+    // Copy button — flashes "Copied!" with a check icon for ~1–2s after
+    // press (cleared on next Tick). The non-flash state stays cyan to
+    // read as a clickable accent; the flash state goes green to match
+    // the "ready" semantic elsewhere in the app.
+    let (copy_icon, copy_label, copy_color) = if copied_flash {
+        (ICON_CHECK, "Copied", pal.green)
+    } else {
+        (ICON_COPY, "Copy", cyan)
+    };
+
+    let copy_btn_inner = row![
+        icon_svg(copy_icon, 11.0, copy_color),
+        text(copy_label).size(11).color(copy_color),
+    ]
+    .spacing(4)
+    .align_y(iced::Alignment::Center);
+
+    let copy_btn = mouse_area(copy_btn_inner)
+        .on_press(Message::CopyToClipboard(HELP_AGENT_PROMPT.to_string()));
+
+    // Prompt is a read-only text_editor so the user can select text
+    // (URL, individual lines) instead of being forced to use Copy.
+    // Edit actions are dropped in update(); selection/scroll/etc work.
+    // Style the editor with a transparent background so the wrapping
+    // container's bg/border define the visual block.
+    let editor = text_editor(prompt_content)
+        .on_action(Message::PromptAction)
+        .size(11)
+        .height(iced::Length::Fixed(110.0))
+        .style(move |_theme, _status| text_editor::Style {
+            background: iced::Background::Color(iced::Color::TRANSPARENT),
+            border: iced::Border {
+                color: iced::Color::TRANSPARENT,
+                width: 0.0,
+                radius: 0.0.into(),
+            },
+            icon: muted,
+            placeholder: muted,
+            value: fg,
+            selection: cyan,
+        });
+
+    let prompt_block = container(
+        column![
+            editor,
+            row![iced::widget::horizontal_space(), copy_btn].align_y(iced::Alignment::Center),
+        ]
+        .spacing(8),
+    )
+    .padding(10)
+    .width(iced::Fill)
+    .style(move |_theme| container::Style {
+        background: Some(iced::Background::Color(bg)),
+        border: iced::Border {
+            color: border,
+            width: 1.0,
+            radius: 6.0.into(),
+        },
+        shadow: iced::Shadow::default(),
+        text_color: None,
+    });
+
+    // GitHub link — clickable, opens in browser. Useful for the human
+    // who just wants to read it themselves rather than hand it off.
+    let github_row = row![
+        text("Read on GitHub: ").size(11).color(muted),
+        mouse_area(text(HELP_DOC_BLOB_URL.to_string()).size(11).color(cyan))
+            .on_press(Message::OpenUrl(HELP_DOC_BLOB_URL.to_string())),
+    ]
+    .align_y(iced::Alignment::Center);
+
+    let content = column![
+        title,
+        intro,
+        meta_header,
+        meta_body,
+        status_header,
+        status_body,
+        divider,
+        agent_header,
+        agent_intro,
+        prompt_block,
+        github_row,
+    ]
+    .spacing(10)
+    .width(iced::Fill);
+
+    scrollable(
+        container(content)
+            .padding(iced::Padding {
+                top: 4.0,
+                right: 16.0,
+                bottom: 16.0,
+                left: 16.0,
+            })
+            .width(iced::Fill),
+    )
     .into()
 }
 
@@ -617,6 +889,11 @@ fn subscription(_app: &App) -> Subscription<Message> {
                 if c == "q" {
                     return Some(Message::Quit);
                 }
+            }
+        }
+        if let iced::keyboard::Key::Character(c) = key.as_ref() {
+            if c == "?" {
+                return Some(Message::ToggleHelp);
             }
         }
         None
