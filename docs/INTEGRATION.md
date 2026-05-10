@@ -14,9 +14,26 @@
 > Don't rewrite a working dev runner. Add the registry/status hooks
 > alongside whatever it already does.
 
-Sutra reads `~/.dev-runner/`. Any dev runner that writes the right files
-gets a live status row in the dashboard — no daemon, no IPC, no SDK.
-Just files.
+Sutra is a **situational-awareness dashboard** for the dev runners on
+a developer's machine. Each compatible dev runner publishes a tiny set
+of files into `~/.dev-runner/` advertising itself; sutra reads them
+and renders one unified view of every active environment. No daemon,
+no IPC, no SDK — just files.
+
+What sutra does:
+
+- **Visualizes the discrete components of each dev runner** — server,
+  vite, wasm, mobile, etc. — and the state of each, *as advertised by
+  the dev runner itself*. Sutra doesn't measure or infer state; it
+  surfaces what the dev script writes.
+- **Offers limited control** — essentially just a shutdown button per
+  environment. The button sends a single SIGTERM to the supervisor
+  PID the dev runner published; your supervisor's trap is what
+  actually reaps children, runs cleanup, and removes the registry
+  entry. Anything richer (restart, per-unit stop, port reassignment)
+  belongs in the dev script's own CLI, not in sutra.
+
+Your dev script owns its lifecycle. Sutra is the dashboard.
 
 For exact file format and edge cases, see [STATE_SPEC.md](../STATE_SPEC.md).
 
@@ -385,12 +402,13 @@ echo "$SUPERVISOR_PID" > "$PID_FILE"
 register_instance "$SUPERVISOR_PID"
 
 # Verify the supervisor is its own process-group leader. If $set -m
-# didn't take effect (some non-interactive shells), sutra's terminate
-# button will only signal the supervisor PID — children survive.
+# didn't take effect (some non-interactive shells), the trap above
+# can't `kill -- -$MY_PGID` cleanly and a SIGTERM (e.g. from sutra's
+# terminate button, or from `./dev.sh --stop`) will leak children.
 sleep 0.05
 actual_pgid=$(ps -o pgid= -p "$SUPERVISOR_PID" 2>/dev/null | tr -d ' ')
 [ "$actual_pgid" = "$SUPERVISOR_PID" ] || \
-    echo "warning: supervisor is not a process-group leader — terminate may leak children" >&2
+    echo "warning: supervisor is not a process-group leader — your trap can't reap the group" >&2
 ```
 
 If you can't depend on bash 4+ (e.g. you ship to colleagues who use
@@ -675,10 +693,14 @@ directly to bugs sutra users hit when a dev runner is partway done.
 - [ ] **Defensive clear at start.** `clear_all_status` runs before a
       fresh start, so a previous crash doesn't leave the dashboard
       showing stale `ready` rows.
-- [ ] **`PID=` is the supervisor process-group leader.** The PID
-      written to the meta file should satisfy `PGID == PID` — verify
-      with `ps -o pgid= -p $PID`. If you used the bash `set -m + (...)
-      &` pattern, also verify you're on bash 4+ (macOS bash 3.2 makes
+- [ ] **`PID=` is the supervisor and a process-group leader.** The
+      PID written to the meta file should satisfy `PGID == PID` —
+      verify with `ps -o pgid= -p $PID`. This isn't for sutra's
+      benefit (sutra only ever signals the one PID); it's so your
+      *own* SIGTERM trap can `kill -- -$PGID` to reap children when
+      anyone — sutra, `./dev.sh --stop`, manual `kill` — asks the
+      supervisor to exit. If you're on the bash `set -m + (...) &`
+      pattern, also verify you're on bash 4+ (macOS bash 3.2 makes
       `$BASHPID` empty and silently breaks group cleanup).
 - [ ] **Re-runs are idempotent.** Running the script twice in a row
       doesn't pile up duplicate registry entries or status files. (The
@@ -718,11 +740,15 @@ doesn't require it to exist before the dev script runs.
   are atomic — write to `<file>.tmp` and `mv -f` it into place. Bare
   `> file` is truncate-then-write and the watcher can read the empty
   intermediate state.
-- **macOS: terminate-button doesn't kill children.** You're probably
-  on bash 3.2 (the system default), where `$BASHPID` is empty and
-  `set -m` cleanup silently fails. Either `brew install bash` and
+- **macOS: SIGTERM to the supervisor doesn't reap children.** Your
+  supervisor's trap is silently failing to kill its group — you're
+  probably on bash 3.2 (the system default), where `$BASHPID` is
+  empty and `kill -- -""` is a no-op. Either `brew install bash` and
   use `/opt/homebrew/bin/bash` in your shebang, or substitute
   `MY_PGID=$(ps -o pgid= -p $$ | tr -d ' ')` for the `$BASHPID` line.
+  This affects any caller that sends SIGTERM — sutra's terminate
+  button, `./dev.sh --stop`, manual `kill <pid>` — they all rely on
+  your trap to reap the group.
 - **Two checkouts of the same project conflict.** They won't — the id
   hashes the absolute path, so `~/code/myapp` and `~/work/myapp` get
   different ids.

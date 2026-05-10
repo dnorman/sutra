@@ -312,17 +312,19 @@ fn update(app: &mut App, message: Message) -> iced::Task<Message> {
         }
         Message::TerminateEnv { pid } => {
             if let Ok(raw_pid) = i32::try_from(pid) {
-                // Prefer killing the entire process group so children of
-                // the supervisor (cargo-watch, vite, metro, …) die too.
-                // Negative PID = "send to process group with that PGID".
-                // If the env isn't a PG leader (PGID != PID), the group
-                // signal returns ESRCH and we fall back to signaling
-                // just the supervisor PID.
-                let group = nix::unistd::Pid::from_raw(-raw_pid);
-                let single = nix::unistd::Pid::from_raw(raw_pid);
-                if nix::sys::signal::kill(group, nix::sys::signal::Signal::SIGTERM).is_err() {
-                    let _ = nix::sys::signal::kill(single, nix::sys::signal::Signal::SIGTERM);
-                }
+                // Sutra is a situational-awareness dashboard with
+                // intentionally limited control: one shutdown button
+                // per env, which sends a single SIGTERM to the one
+                // PID the dev runner published — its supervisor.
+                // The supervisor's own trap reaps its children,
+                // does any orderly cleanup, and removes the registry
+                // entry. Signaling the process group ourselves would
+                // override the supervisor's shutdown sequence and
+                // overstep the dashboard boundary.
+                let _ = nix::sys::signal::kill(
+                    nix::unistd::Pid::from_raw(raw_pid),
+                    nix::sys::signal::Signal::SIGTERM,
+                );
             }
         }
         Message::HoverUnit { env_id, unit_name } => {

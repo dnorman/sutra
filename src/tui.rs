@@ -130,20 +130,20 @@ impl App {
         }
     }
 
-    /// Send SIGTERM to the environment of the currently selected unit.
-    /// Targets the process group (negative PID) first so children of
-    /// the supervisor die too; falls back to single-PID signal if the
-    /// env isn't a process-group leader.
+    /// Send SIGTERM to the supervisor PID published in the env's meta
+    /// file. Sutra is a situational-awareness dashboard with limited
+    /// control — the supervisor owns its children and is responsible
+    /// for tearing them down via its own SIGTERM trap. See
+    /// `Message::TerminateEnv` in gui.rs for the longer rationale.
     fn terminate_selected_env(&self) {
         if let Some(r) = self.selected_unit_ref() {
             let env = &self.envs[r.env_index];
             if env.alive {
                 if let Ok(raw_pid) = i32::try_from(env.pid) {
-                    let group = nix::unistd::Pid::from_raw(-raw_pid);
-                    let single = nix::unistd::Pid::from_raw(raw_pid);
-                    if nix::sys::signal::kill(group, nix::sys::signal::Signal::SIGTERM).is_err() {
-                        let _ = nix::sys::signal::kill(single, nix::sys::signal::Signal::SIGTERM);
-                    }
+                    let _ = nix::sys::signal::kill(
+                        nix::unistd::Pid::from_raw(raw_pid),
+                        nix::sys::signal::Signal::SIGTERM,
+                    );
                 }
             }
         }
